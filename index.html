@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>《阿细先基》植物词汇知识图谱</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="data.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* 标题栏 */
+  .header {
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; z-index: 100;
+  }
+  .header h1 {
+    font-size: 18px; font-weight: 600;
+    background: linear-gradient(90deg, #2ecc71, #3498db, #e74c3c);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .header .subtitle { font-size: 12px; color: #64748b; margin-left: 12px; }
+  .legend {
+    display: flex; gap: 16px; align-items: center;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: #94a3b8;
+  }
+  .legend-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+  }
+
+  /* 左侧面板 */
+  .left-panel {
+    position: fixed; left: 0; top: 52px; bottom: 0;
+    width: 280px; background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(148, 163, 184, 0.1);
+    padding: 16px; overflow-y: auto; z-index: 90;
+    transition: transform 0.3s ease;
+  }
+  .panel-section { margin-bottom: 20px; }
+  .panel-section h3 {
+    font-size: 13px; font-weight: 600; color: #94a3b8;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  }
+
+  /* 搜索框 */
+  .search-box {
+    width: 100%; padding: 8px 12px;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px; color: #e2e8f0;
+    font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .search-box:focus {
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+  }
+  .search-box::placeholder { color: #475569; }
+
+  /* 诗作筛选 */
+  .poem-filter {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .poem-btn {
+    padding: 8px 12px; border-radius: 6px;
+    background: rgba(30, 41, 59, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    color: #cbd5e1; font-size: 12px; cursor: pointer;
+    transition: all 0.2s; text-align: left;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .poem-btn:hover {
+    background: rgba(52, 152, 219, 0.15);
+    border-color: rgba(52, 152, 219, 0.3);
+  }
+  .poem-btn.active {
+    background: rgba(52, 152, 219, 0.25);
+    border-color: #3498db; color: #60a5fa;
+  }
+  .poem-btn .count {
+    font-size: 11px; color: #64748b;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .poem-btn.active .count { color: #93c5fd; }
+
+  /* 植物列表 */
+  .plant-list {
+    max-height: 280px; overflow-y: auto;
+    border-radius: 6px; background: rgba(30, 41, 59, 0.4);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+  }
+  .plant-item {
+    padding: 6px 10px; font-size: 12px;
+    color: #cbd5e1; cursor: pointer;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.05);
+    display: flex; justify-content: space-between; align-items: center;
+    transition: background 0.15s;
+  }
+  .plant-item:hover { background: rgba(46, 204, 113, 0.1); }
+  .plant-item.active {
+    background: rgba(46, 204, 113, 0.2);
+    color: #6ee7b7; font-weight: 500;
+  }
+  .plant-item .degree {
+    font-size: 10px; color: #475569;
+    background: rgba(15, 23, 42, 0.6);
+    padding: 1px 6px; border-radius: 8px;
+  }
+  .plant-item.active .degree { color: #34d399; }
+
+  /* 统计 */
+  .stats-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .stat-card {
+    background: rgba(30, 41, 59, 0.5);
+    border-radius: 8px; padding: 10px;
+    text-align: center; border: 1px solid rgba(148, 163, 184, 0.1);
+  }
+  .stat-value {
+    font-size: 20px; font-weight: 700;
+    color: #f8fafc;
+  }
+  .stat-label {
+    font-size: 10px; color: #64748b; margin-top: 2px;
+  }
+
+  /* 右侧详情面板 */
+  .right-panel {
+    position: fixed; right: 0; top: 52px; bottom: 0;
+    width: 320px; background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(10px);
+    border-left: 1px solid rgba(148, 163, 184, 0.1);
+    padding: 20px; overflow-y: auto; z-index: 90;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  }
+  .right-panel.open { transform: translateX(0); }
+  .right-panel h2 {
+    font-size: 16px; font-weight: 600;
+    margin-bottom: 16px; padding-bottom: 10px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  }
+  .detail-row {
+    margin-bottom: 14px;
+  }
+  .detail-label {
+    font-size: 11px; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .detail-value {
+    font-size: 14px; color: #e2e8f0; line-height: 1.5;
+  }
+  .detail-value.quote {
+    font-size: 16px; color: #60a5fa;
+    font-style: italic; padding: 10px;
+    background: rgba(52, 152, 219, 0.08);
+    border-radius: 8px; border-left: 3px solid #3498db;
+  }
+  .close-btn {
+    position: absolute; top: 16px; right: 16px;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #94a3b8; cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .close-btn:hover {
+    background: rgba(231, 76, 60, 0.2);
+    color: #f87171; border-color: rgba(231, 76, 60, 0.3);
+  }
+
+  /* 图谱容器 */
+  #graphContainer {
+    position: fixed; top: 52px; left: 280px; right: 0; bottom: 0;
+    transition: right 0.3s ease;
+  }
+  #graphContainer.panel-open { right: 320px; }
+  svg { width: 100%; height: 100%; }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute; pointer-events: none;
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 8px; padding: 10px 14px;
+    font-size: 12px; color: #e2e8f0;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    z-index: 200; opacity: 0; transition: opacity 0.2s;
+    max-width: 280px;
+  }
+  .tooltip.show { opacity: 1; }
+  .tooltip-title {
+    font-weight: 600; margin-bottom: 4px;
+    font-size: 13px;
+  }
+  .tooltip-meta { color: #64748b; font-size: 11px; }
+
+  /* 控制按钮 */
+  .controls {
+    position: fixed; bottom: 20px; left: 300px;
+    display: flex; gap: 8px; z-index: 95;
+  }
+  .ctrl-btn {
+    padding: 8px 16px; border-radius: 8px;
+    background: rgba(30, 41, 59, 0.85);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    color: #cbd5e1; font-size: 12px; cursor: pointer;
+    transition: all 0.2s; backdrop-filter: blur(4px);
+  }
+  .ctrl-btn:hover {
+    background: rgba(52, 152, 219, 0.2);
+    border-color: #3498db; color: #60a5fa;
+  }
+
+  /* 高亮样式 */
+  .node-dim { opacity: 0.08 !important; }
+  .link-dim { opacity: 0.05 !important; }
+  .node-highlight { stroke: #fbbf24; stroke-width: 3px; }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(148, 163, 184, 0.35);
+  }
+
+  /* 加载动画 */
+  .loading {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: #0f172a; z-index: 300;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    transition: opacity 0.5s;
+  }
+  .loading.hidden { opacity: 0; pointer-events: none; }
+  .loading-spinner {
+    width: 48px; height: 48px;
+    border: 3px solid rgba(52, 152, 219, 0.2);
+    border-top-color: #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    margin-top: 16px; font-size: 14px; color: #64748b;
+  }
+</style>
+</head>
+<body>
+
+<!-- 加载画面 -->
+<div class="loading" id="loading">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">正在构建知识图谱...</div>
+</div>
+
+<!-- 标题栏 -->
+<div class="header">
+  <div style="display:flex;align-items:center;">
+    <h1>《阿细先基》植物词汇知识图谱</h1>
+    <span class="subtitle">阿细彝族史诗 · 530节点 · 878关系</span>
+  </div>
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#2ecc71;"></div>
+      <span>植物 (86)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#3498db;"></div>
+      <span>引文 (439)</span>
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="background:#e74c3c;"></div>
+      <span>诗作 (5)</span>
+    </div>
+  </div>
+</div>
+
+<!-- 左侧面板 -->
+<div class="left-panel" id="leftPanel">
+  <!-- 统计 -->
+  <div class="panel-section">
+    <h3>📊 图谱统计</h3>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value" style="color:#2ecc71;">86</div>
+        <div class="stat-label">植物</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#3498db;">439</div>
+        <div class="stat-label">引文</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#e74c3c;">5</div>
+        <div class="stat-label">诗作</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color:#f59e0b;">878</div>
+        <div class="stat-label">关系</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 搜索 -->
+  <div class="panel-section">
+    <h3>🔍 搜索节点</h3>
+    <input type="text" class="search-box" id="searchBox"
+           placeholder="输入植物名、句子或诗作名...">
+  </div>
+
+  <!-- 诗作筛选 -->
+  <div class="panel-section">
+    <h3>📖 按诗作筛选</h3>
+    <div class="poem-filter" id="poemFilter"></div>
+  </div>
+
+  <!-- 植物列表 -->
+  <div class="panel-section">
+    <h3>🌿 植物列表</h3>
+    <div class="plant-list" id="plantList"></div>
+  </div>
+</div>
+
+<!-- 右侧详情面板 -->
+<div class="right-panel" id="rightPanel">
+  <button class="close-btn" onclick="closeDetail()">✕</button>
+  <div id="detailContent"></div>
+</div>
+
+<!-- 图谱容器 -->
+<div class="graph-container" id="graphContainer">
+  <svg id="graphSvg"></svg>
+</div>
+
+<!-- 控制按钮 -->
+<div class="controls">
+  <button class="ctrl-btn" onclick="resetView()">⟲ 重置视图</button>
+  <button class="ctrl-btn" onclick="toggleLabels()">🏷 切换标签</button>
+  <button class="ctrl-btn" onclick="clearHighlight()">✦ 清除高亮</button>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// D3.js 知识图谱可视化
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let svg, g, simulation, link, node, label;
+let width, height;
+let showLabels = true;
+let activePoem = 'all';
+let selectedNodeId = null;
+let zoom;
+
+const colorMap = {
+  Plant: '#2ecc71',
+  Quote: '#3498db',
+  Poem: '#e74c3c'
+};
+
+const nodes = graphData.nodes;
+const links = graphData.links;
+
+// 初始化
+function init() {
+  const container = document.getElementById('graphContainer');
+  width = container.clientWidth;
+  height = container.clientHeight;
+
+  svg = d3.select('#graphSvg')
+    .attr('viewBox', [0, 0, width, height]);
+
+  // 定义箭头标记
+  const defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id', 'arrow-appears')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 20)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', 'rgba(148,163,184,0.3)');
+
+  defs.append('marker')
+    .attr('id', 'arrow-belongs')
+    .attr('viewBox', '0 -5 10 10')
+    .attr('refX', 28)
+    .attr('refY', 0)
+    .attr('markerWidth', 6)
+    .attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path')
+    .attr('d', 'M0,-5L10,0L0,5')
+    .attr('fill', 'rgba(148,163,184,0.3)');
+
+  g = svg.append('g');
+
+  // 缩放
+  zoom = d3.zoom()
+    .scaleExtent([0.1, 4])
+    .on('zoom', (event) => g.attr('transform', event.transform));
+  svg.call(zoom);
+
+  // 力导向模拟
+  simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id)
+      .distance(d => d.type === 'APPEARS_IN' ? 60 : 100))
+    .force('charge', d3.forceManyBody().strength(d => {
+      if (d.group === 'Poem') return -800;
+      if (d.group === 'Plant') return -300;
+      return -80;
+    }))
+    .force('center', d3.forceCenter(width / 2, height / 2))
+    .force('collision', d3.forceCollide().radius(d => d.radius + 3))
+    .force('x', d3.forceX(width / 2).strength(0.03))
+    .force('y', d3.forceY(height / 2).strength(0.03));
+
+  render();
+  initUI();
+
+  // 隐藏加载画面
+  setTimeout(() => {
+    document.getElementById('loading').classList.add('hidden');
+  }, 800);
+}
+
+function render() {
+  // 连线
+  link = g.append('g')
+    .attr('class', 'links')
+    .selectAll('line')
+    .data(links)
+    .join('line')
+    .attr('stroke', d => d.type === 'APPEARS_IN'
+      ? 'rgba(46, 204, 113, 0.25)'
+      : 'rgba(52, 152, 219, 0.25)')
+    .attr('stroke-width', d => d.type === 'APPEARS_IN' ? 1 : 1.5)
+    .attr('marker-end', d => d.type === 'APPEARS_IN'
+      ? 'url(#arrow-appears)'
+      : 'url(#arrow-belongs)');
+
+  // 节点
+  node = g.append('g')
+    .attr('class', 'nodes')
+    .selectAll('circle')
+    .data(nodes)
+    .join('circle')
+    .attr('r', d => d.radius)
+    .attr('fill', d => colorMap[d.group])
+    .attr('stroke', d => d.group === 'Poem' ? '#fbbf24' : 'rgba(255,255,255,0.3)')
+    .attr('stroke-width', d => d.group === 'Poem' ? 2 : 1)
+    .attr('cursor', 'pointer')
+    .call(d3.drag()
+      .on('start', dragstarted)
+      .on('drag', dragged)
+      .on('end', dragended));
+
+  // 标签
+  label = g.append('g')
+    .attr('class', 'labels')
+    .selectAll('text')
+    .data(nodes)
+    .join('text')
+    .text(d => d.group === 'Quote' ? '' : d.name)
+    .attr('font-size', d => d.group === 'Poem' ? 14 : 11)
+    .attr('font-weight', d => d.group === 'Poem' ? 600 : 400)
+    .attr('fill', '#e2e8f0')
+    .attr('dx', d => d.radius + 4)
+    .attr('dy', 4)
+    .attr('pointer-events', 'none')
+    .style('text-shadow', '0 1px 4px rgba(0,0,0,0.8)')
+    .style('opacity', d => d.group === 'Plant' ? 0.85 : 0.9);
+
+  // 事件绑定
+  node
+    .on('mouseover', handleMouseOver)
+    .on('mouseout', handleMouseOut)
+    .on('click', handleClick);
+
+  simulation.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x)
+      .attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x)
+      .attr('y2', d => d.target.y);
+
+    node
+      .attr('cx', d => d.x)
+      .attr('cy', d => d.y);
+
+    label
+      .attr('x', d => d.x)
+      .attr('y', d => d.y);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 交互处理
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function handleMouseOver(event, d) {
+  const tooltip = document.getElementById('tooltip');
+  let content = '';
+  if (d.group === 'Plant') {
+    content = `<div class="tooltip-title">🌿 ${d.name}</div>
+               <div class="tooltip-meta">彝语: ${d.yi_ipa || '—'}</div>
+               <div class="tooltip-meta">出处数: ${d.degree} 条</div>`;
+  } else if (d.group === 'Quote') {
+    content = `<div class="tooltip-title">「${d.name}」</div>
+               <div class="tooltip-meta">${d.poem_name} · 第${d.line_no}行</div>`;
+  } else if (d.group === 'Poem') {
+    content = `<div class="tooltip-title">📖 ${d.name}</div>
+               <div class="tooltip-meta">包含 ${d.degree} 条引文</div>`;
+  }
+  tooltip.innerHTML = content;
+  tooltip.style.left = (event.pageX + 12) + 'px';
+  tooltip.style.top = (event.pageY + 12) + 'px';
+  tooltip.classList.add('show');
+}
+
+function handleMouseOut() {
+  document.getElementById('tooltip').classList.remove('show');
+}
+
+function handleClick(event, d) {
+  event.stopPropagation();
+  selectedNodeId = d.id;
+  highlightNode(d);
+  showDetail(d);
+
+  // 更新植物列表高亮
+  document.querySelectorAll('.plant-item').forEach(el => el.classList.remove('active'));
+  const item = document.querySelector(`.plant-item[data-id="${d.id}"]`);
+  if (item) item.classList.add('active');
+}
+
+// 高亮节点及其邻居
+function highlightNode(centerNode) {
+  // 找出相关节点
+  const connected = new Set();
+  connected.add(centerNode.id);
+
+  // 找出与中心节点直接相连的节点
+  links.forEach(l => {
+    if (l.source.id === centerNode.id) connected.add(l.target.id);
+    if (l.target.id === centerNode.id) connected.add(l.source.id);
+  });
+
+  // 如果是 Plant，再找出二级邻居（Quote 连接的 Poem）
+  if (centerNode.group === 'Plant') {
+    const quotes = [];
+    links.forEach(l => {
+      if (l.source.id === centerNode.id && l.target.group === 'Quote') {
+        quotes.push(l.target.id);
+      }
+    });
+    links.forEach(l => {
+      if (quotes.includes(l.source.id) && l.target.group === 'Poem') {
+        connected.add(l.target.id);
+      }
+    });
+  }
+
+  // 应用样式
+  node.classed('node-dim', d => !connected.has(d.id));
+  node.classed('node-highlight', d => d.id === centerNode.id);
+  link.classed('link-dim', d =>
+    !connected.has(d.source.id) || !connected.has(d.target.id));
+  label.style('opacity', d => connected.has(d.id) ? 1 : 0.05);
+}
+
+function clearHighlight() {
+  selectedNodeId = null;
+  node.classed('node-dim', false).classed('node-highlight', false);
+  link.classed('link-dim', false);
+  label.style('opacity', d => d.group === 'Plant' ? 0.85 : 0.9);
+  closeDetail();
+  document.querySelectorAll('.plant-item').forEach(el => el.classList.remove('active'));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 详情面板
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function showDetail(d) {
+  const panel = document.getElementById('rightPanel');
+  const container = document.getElementById('graphContainer');
+  const content = document.getElementById('detailContent');
+
+  let html = '';
+  if (d.group === 'Plant') {
+    // 找出该植物的所有引文
+    const quotes = links
+      .filter(l => l.source.id === d.id && l.type === 'APPEARS_IN')
+      .map(l => l.target);
+
+    const poems = [...new Set(quotes.map(q => q.poem_name))];
+
+    html = `<h2>🌿 ${d.name}</h2>
+      <div class="detail-row">
+        <div class="detail-label">彝语国际音标</div>
+        <div class="detail-value" style="font-family:serif;font-size:16px;">${d.yi_ipa || '—'}</div>
+      </div>
+      ${d.note ? `<div class="detail-row">
+        <div class="detail-label">备注</div>
+        <div class="detail-value" style="color:#94a3b8;">${d.note}</div>
+      </div>` : ''}
+      <div class="detail-row">
+        <div class="detail-label">出处统计</div>
+        <div class="detail-value">${quotes.length} 条引文，分布在 ${poems.length} 部诗作中</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">出现诗作</div>
+        <div class="detail-value">${poems.map(p => `<span style="color:#60a5fa;">${p}</span>`).join('、')}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">引文列表</div>
+        <div style="max-height:300px;overflow-y:auto;">
+          ${quotes.map(q => `
+            <div style="padding:8px 0;border-bottom:1px solid rgba(148,163,184,0.1);">
+              <div class="detail-value quote" style="margin:0;font-size:14px;">「${q.name}」</div>
+              <div class="tooltip-meta" style="margin-top:4px;">${q.poem_name} · 第${q.line_no}行</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+
+  } else if (d.group === 'Quote') {
+    const plant = links.find(l => l.target.id === d.id && l.type === 'APPEARS_IN')?.source;
+    const poem = links.find(l => l.source.id === d.id && l.type === 'BELONGS_TO')?.target;
+
+    html = `<h2>💬 引文详情</h2>
+      <div class="detail-row">
+        <div class="detail-label">句子内容</div>
+        <div class="detail-value quote">「${d.name}」</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">所属诗作</div>
+        <div class="detail-value" style="color:#f87171;">${d.poem_name}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">行号</div>
+        <div class="detail-value">第 ${d.line_no} 行</div>
+      </div>
+      ${plant ? `<div class="detail-row">
+        <div class="detail-label">涉及植物</div>
+        <div class="detail-value" style="color:#34d399;">${plant.name} (${plant.yi_ipa})</div>
+      </div>` : ''}
+      <div class="detail-row">
+        <div class="detail-label">出处原文</div>
+        <div class="detail-value" style="color:#64748b;font-size:12px;">${d.source_text}</div>
+      </div>`;
+
+  } else if (d.group === 'Poem') {
+    const quotes = links
+      .filter(l => l.target.id === d.id && l.type === 'BELONGS_TO')
+      .map(l => l.source);
+    const plants = [...new Set(quotes.map(q => {
+      const plantLink = links.find(l => l.target.id === q.id && l.type === 'APPEARS_IN');
+      return plantLink ? plantLink.source : null;
+    }).filter(Boolean))];
+
+    html = `<h2>📖 ${d.name}</h2>
+      <div class="detail-row">
+        <div class="detail-label">引文总数</div>
+        <div class="detail-value">${quotes.length} 条</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">涉及植物种类</div>
+        <div class="detail-value">${plants.length} 种</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">植物列表</div>
+        <div class="detail-value">
+          ${plants.map(p => `<span style="color:#34d399;">${p.name}</span>`).join('、')}
+        </div>
+      </div>`;
+  }
+
+  content.innerHTML = html;
+  panel.classList.add('open');
+  container.classList.add('panel-open');
+}
+
+function closeDetail() {
+  document.getElementById('rightPanel').classList.remove('open');
+  document.getElementById('graphContainer').classList.remove('panel-open');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UI 初始化
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function initUI() {
+  // 诗作筛选按钮
+  const poemFilter = document.getElementById('poemFilter');
+  const poems = [...new Set(nodes.filter(n => n.group === 'Poem').map(n => n.name))];
+
+  // "全部" 按钮
+  const allBtn = document.createElement('button');
+  allBtn.className = 'poem-btn active';
+  allBtn.innerHTML = `<span>📚 全部诗作</span><span class="count">439</span>`;
+  allBtn.onclick = () => filterByPoem('all', allBtn);
+  poemFilter.appendChild(allBtn);
+
+  poems.forEach(poemName => {
+    const count = nodes.filter(n => n.group === 'Quote' && n.poem_name === poemName).length;
+    const btn = document.createElement('button');
+    btn.className = 'poem-btn';
+    btn.innerHTML = `<span>${poemName}</span><span class="count">${count}</span>`;
+    btn.onclick = () => filterByPoem(poemName, btn);
+    poemFilter.appendChild(btn);
+  });
+
+  // 植物列表
+  const plantList = document.getElementById('plantList');
+  const plantNodes = nodes.filter(n => n.group === 'Plant')
+    .sort((a, b) => b.degree - a.degree);
+
+  plantNodes.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'plant-item';
+    div.dataset.id = p.id;
+    div.innerHTML = `<span>${p.name}</span><span class="degree">${p.degree}</span>`;
+    div.onclick = () => {
+      const nodeData = nodes.find(n => n.id === p.id);
+      if (nodeData) {
+        // 居中并缩放
+        svg.transition().duration(500).call(
+          zoom.transform,
+          d3.zoomIdentity.translate(width/2, height/2).scale(1.5).translate(-nodeData.x, -nodeData.y)
+        );
+        handleClick({stopPropagation:()=>{}}, nodeData);
+      }
+    };
+    plantList.appendChild(div);
+  });
+
+  // 搜索
+  document.getElementById('searchBox').addEventListener('input', handleSearch);
+
+  // 点击空白处清除高亮
+  svg.on('click', () => clearHighlight());
+}
+
+function filterByPoem(poemName, btn) {
+  // 更新按钮状态
+  document.querySelectorAll('.poem-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activePoem = poemName;
+
+  if (poemName === 'all') {
+    // 显示全部
+    node.style('display', 'block');
+    link.style('display', 'block');
+    label.style('display', 'block');
+    clearHighlight();
+    return;
+  }
+
+  // 找出该诗作相关的节点
+  const relatedQuotes = nodes.filter(n => n.group === 'Quote' && n.poem_name === poemName).map(n => n.id);
+  const relatedPoem = nodes.find(n => n.group === 'Poem' && n.name === poemName)?.id;
+  const relatedPlants = new Set();
+  links.forEach(l => {
+    if (l.type === 'APPEARS_IN' && relatedQuotes.includes(l.target.id)) {
+      relatedPlants.add(l.source.id);
+    }
+  });
+
+  const visibleIds = new Set([...relatedQuotes, ...relatedPlants, relatedPoem]);
+
+  node.style('display', d => visibleIds.has(d.id) ? 'block' : 'none');
+  link.style('display', d => visibleIds.has(d.source.id) && visibleIds.has(d.target.id) ? 'block' : 'none');
+  label.style('display', d => visibleIds.has(d.id) && d.group !== 'Quote' ? 'block' : 'none');
+
+  // 重新加热力模拟
+  simulation.alpha(0.3).restart();
+}
+
+function handleSearch(e) {
+  const term = e.target.value.trim().toLowerCase();
+  if (!term) {
+    clearHighlight();
+    return;
+  }
+
+  const matched = nodes.find(n =>
+    n.name.toLowerCase().includes(term) ||
+    (n.yi_ipa && n.yi_ipa.toLowerCase().includes(term)) ||
+    (n.poem_name && n.poem_name.toLowerCase().includes(term))
+  );
+
+  if (matched) {
+    highlightNode(matched);
+    showDetail(matched);
+    // 居中
+    svg.transition().duration(500).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(width/2, height/2).scale(1.5).translate(-matched.x, -matched.y)
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 控制按钮
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function resetView() {
+  svg.transition().duration(750).call(
+    zoom.transform,
+    d3.zoomIdentity
+  );
+  clearHighlight();
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  label.style('opacity', d => {
+    if (!showLabels) return 0;
+    return d.group === 'Plant' ? 0.85 : (d.group === 'Poem' ? 0.9 : 0);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// D3 Drag
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function dragstarted(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+
+function dragged(event, d) {
+  d.fx = event.x; d.fy = event.y;
+}
+
+function dragended(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 响应式
+// ═══════════════════════════════════════════════════════════════════════════════
+
+window.addEventListener('resize', () => {
+  const container = document.getElementById('graphContainer');
+  width = container.clientWidth;
+  height = container.clientHeight;
+  svg.attr('viewBox', [0, 0, width, height]);
+  simulation.force('center', d3.forceCenter(width / 2, height / 2));
+  simulation.alpha(0.3).restart();
+});
+
+// 启动
+init();
+</script>
+</body>
+</html>
